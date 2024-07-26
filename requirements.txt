@@ -5,8 +5,4 @@ langchain-community
 langchain-openai
 langchain-experimental
 neo4j
-py2neo
-graphviz
-networkx
-matplotlib
-scipy
+streamlit-agraph==0.0.45
