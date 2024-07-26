@@ -9,7 +9,8 @@ from streamlit_agraph import Config
 import networkx as nx
 from matplotlib import pyplot as plt
 
-def process_query(query):
+# Returns the answer and generated Cypher query
+def process_query(cypher_chain, query):
     result = cypher_chain(query)
     intermediate_steps = result['intermediate_steps']
     final_answer = result['result']
@@ -17,15 +18,16 @@ def process_query(query):
     response_structured = final_answer    
     return response_structured, generated_cypher
 
+# Displays the graph
 def display_graph(query):
     driver = GraphDatabase.driver(os.environ["NEO4J_URI"], auth=(os.environ["NEO4J_USERNAME"], os.environ["NEO4J_PASSWORD"]))
     with driver.session() as session:
         result = session.run(query)
         G = nx.Graph()
         for record in result:
-            brand = record.get('b.name')  # Use .get() to handle missing keys
-            product = record.get('p.name')
-            competitor = record.get('c.name')
+            brand = record.get('b.name') if record.get('b.name') else record.get('Brand')
+            product = record.get('p.name') if record.get('p.name') else record.get('Product')
+            competitor = record.get('c.name') if record.get('c.name') else record.get('Competitor')
             if brand and product:  # Only add nodes/edges if both Brand and Product exist
                 G.add_node(brand)
                 G.add_node(product)
@@ -45,20 +47,16 @@ def display_graph(query):
 st.title("Luxury Dashboard")
 st.write("Ask a question about the dataset below! To use this app, you need to provide an OpenAI API key.")
 
+# Parameters
 os.environ["NEO4J_URI"] = "neo4j+s://09516404.databases.neo4j.io"
 os.environ["NEO4J_USERNAME"] = "neo4j"
 os.environ["NEO4J_PASSWORD"] = "xTyNa-R6nR9NHjpxYGdLWOUFW3jHwzHUHkrU9yk7b2E"
-
 graph = Neo4jGraph(
     url=os.environ["NEO4J_URI"],
     username=os.environ["NEO4J_USERNAME"],
     password=os.environ["NEO4J_PASSWORD"])
 
-node_types = ['BRAND', 'PRODUCT', 'COMPETITOR']
-relationship_types = ['SELLS', 'COMPETES_WITH']
-
 openai_api_key = st.text_input("OpenAI API Key", key="langchain_search_api_key_openai", type="password")
-
 
 if not openai_api_key:
     st.error("Please add your OpenAI API key to continue.", icon="🗝️")
@@ -77,15 +75,16 @@ else:
 
     client = OpenAI(api_key=openai_api_key)
     os.environ["OPENAI_API_KEY"] = openai_api_key
+
     cypher_chain = GraphCypherQAChain.from_llm(
         cypher_llm=ChatOpenAI(temperature=0, model_name='gpt-3.5-turbo', api_key=openai_api_key),
         qa_llm=ChatOpenAI(temperature=0, api_key=openai_api_key),
-        graph=graph,
-        verbose=True,
-        return_intermediate_steps=True)
+        graph=graph, verbose=True, return_intermediate_steps=True)
 
-    response_structured, generated_cypher = process_query(question)
+    response_structured, generated_cypher = process_query(cypher_chain, question)
+
     config = Config(height=600, width=800, directed=True, nodeHighlightBehavior=True, highlightColor="#F7A7A6",
         node={'color': 'blue'}, link={'color': 'grey'})
+    # Display answer and graph
     st.chat_message("assistant").write(response_structured)
     display_graph(generated_cypher)
