@@ -7,3 +7,6 @@ langchain-experimental
 neo4j
 py2neo
 graphviz
+networkx
+matplotlib
+scipy

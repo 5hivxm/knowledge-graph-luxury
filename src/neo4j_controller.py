@@ -1,6 +1,8 @@
 from neo4j import GraphDatabase
 from neo4j.exceptions import CypherSyntaxError
-import openai
+from openai import OpenAI
+
+client = OpenAI(api_key=openai_api_key)
 import streamlit as st
 
 
@@ -43,7 +45,6 @@ def schema_text(node_props, rel_props, rels):
 class Neo4jGPTQuery:
     def __init__(self, url, user, password, openai_api_key):
         self.driver = GraphDatabase.driver(url, auth=(user, password))
-        openai.api_key = openai_api_key
         # construct schema
         self.schema = self.generate_schema()
 
@@ -86,12 +87,10 @@ class Neo4jGPTQuery:
         if history:
             messages.extend(history)
 
-        completions = openai.ChatCompletion.create(
-            model="gpt-4",
-            temperature=0.0,
-            max_tokens=1000,
-            messages=messages
-        )
+        completions = client.chat.completions.create(model="gpt-4",
+        temperature=0.0,
+        max_tokens=1000,
+        messages=messages)
         return completions.choices[0].message.content
 
     def run(self, question, history=None, retry=True):

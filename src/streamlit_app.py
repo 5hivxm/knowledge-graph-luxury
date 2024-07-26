@@ -1,125 +1,19 @@
 from neo4j import GraphDatabase
 from neo4j.exceptions import CypherSyntaxError
-import openai
+from openai import OpenAI
 import streamlit as st
-
-
-node_properties_query = """
-CALL apoc.meta.data()
-YIELD label, other, elementType, type, property
-WHERE NOT type = "RELATIONSHIP" AND elementType = "node"
-WITH label AS nodeLabels, collect(property) AS properties
-RETURN {labels: nodeLabels, properties: properties} AS output
-
-"""
-
-rel_properties_query = """
-CALL apoc.meta.data()
-YIELD label, other, elementType, type, property
-WHERE NOT type = "RELATIONSHIP" AND elementType = "relationship"
-WITH label AS nodeLabels, collect(property) AS properties
-RETURN {type: nodeLabels, properties: properties} AS output
-"""
-
-rel_query = """
-CALL apoc.meta.data()
-YIELD label, other, elementType, type, property
-WHERE type = "RELATIONSHIP" AND elementType = "node"
-RETURN {source: label, relationship: property, target: other} AS output
-"""
-
-def schema_text(node_props, rel_props, rels):
-    return f"""
-  This is the schema representation of the Neo4j database.
-  Node properties are the following:
-  {node_props}
-  Relationship properties are the following:
-  {rel_props}
-  Relationship point from source to target nodes
-  {rels}
-  Make sure to respect relationship types and directions
-  """
-
-class Neo4jGPTQuery:
-    def __init__(self, url, user, password, openai_api_key):
-        self.driver = GraphDatabase.driver(url, auth=(user, password))
-        openai.api_key = openai_api_key
-        # construct schema
-        self.schema = self.generate_schema()
-
-    def generate_schema(self):
-        node_props = self.query_database(node_properties_query)
-        rel_props = self.query_database(rel_properties_query)
-        rels = self.query_database(rel_query)
-        return schema_text(node_props, rel_props, rels)
-
-    def refresh_schema(self):
-        self.schema = self.generate_schema()
-
-    def get_system_message(self):
-        return f"""
-        Task: Generate Cypher queries to query a Neo4j graph database based on the provided schema definition.
-        Instructions:
-        Use only the provided relationship types and properties.
-        Do not use any other relationship types or properties that are not provided.
-        If you cannot generate a Cypher statement based on the provided schema, explain the reason to the user.
-        Schema:
-        {self.schema}
-
-        Note: Do not include any explanations or apologies in your responses.
-        """
-
-    def query_database(self, neo4j_query, params={}):
-        with self.driver.session() as session:
-            result = session.run(neo4j_query, params)
-            output = [r.values() for r in result]
-            output.insert(0, result.keys())
-            return output
-
-    def construct_cypher(self, question, history=None):
-        messages = [
-            {"role": "system", "content": self.get_system_message()},
-            {"role": "user", "content": question},
-        ]
-        # Used for Cypher healing flows
-        if history:
-            messages.extend(history)
-
-        completions = openai.ChatCompletion.create(
-            model="gpt-4",
-            temperature=0.0,
-            max_tokens=1000,
-            messages=messages
-        )
-        return completions.choices[0].message.content
-
-    def run(self, question, history=None, retry=True):
-        # Construct Cypher statement
-        cypher = self.construct_cypher(question, history)
-        print(cypher)
-        try:
-            return self.query_database(cypher)
-        # Self-healing flow
-        except CypherSyntaxError as e:
-            # If out of retries
-            if not retry:
-              return "Invalid Cypher syntax"
-        # Self-healing Cypher flow by
-        # providing specific error to GPT-4
-            print("Retrying")
-            return self.run(
-                question,
-                [
-                    {"role": "assistant", "content": cypher},
-                    {
-                        "role": "user",
-                        "content": f"""This query returns an error: {str(e)} 
-                        Give me a improved query that works without any explanations or apologies""",
-                    },
-                ],
-                retry=False
-            )
-
+import getpass
+import os
+from neo4j import GraphDatabase
+from langchain_community.graphs import Neo4jGraph
+from langchain.chains import GraphCypherQAChain
+from langchain_openai import ChatOpenAI
+import graphviz as graphviz
+import networkx as nx
+import matplotlib.pyplot as plt
+from graphviz import Digraph
+from py2neo import Graph
+import scipy
 
 st.title("Meetup Dashboard")
 st.write(
@@ -127,22 +21,25 @@ st.write(
     "To use this app, you need to provide an OpenAI API key. "
 )
 
+driver = GraphDatabase.driver(st.secrets.neo4j.uri, auth=(st.secrets.neo4j.user, st.secrets.neo4j.password))
+
 openai_api_key = st.text_input("OpenAI API Key", type="password")
 if not openai_api_key:
     st.info("Please add your OpenAI API key to continue.", icon="🗝️")
 
+os.environ["OPENAI_API_KEY"] = openai_api_key
+os.environ["NEO4J_URI"]=st.secrets.neo4j.uri
+os.environ["NEO4J_USERNAME"]=st.secrets.neo4j.user
+os.environ["NEO4J_PASSWORD"]=st.secrets.neo4j.password
 
-gds_db = Neo4jGPTQuery(st.streamlit.secrets.neo4j.uri,
-                       st.streamlit.secrets.neo4j.user,
-                       st.streamlit.secrets.neo4j.password,
-                       openai_api_key=openai_api_key,
-                       )
-
+graph = Neo4jGraph()
+uploaded_file = graph
 with open('src/file.cypher', 'r') as file:
-    luxury_query = file.read()
+    luxury_schema = file.read()
 
-gds_db.query_database(luxury_query)
-gds_db.refresh_schema()
+graph.query(luxury_schema)
+graph.refresh_schema()
+
 
 question = st.selectbox("Select a Question", 
                           ["Which brand offers the highest-priced product in the dataset?",
@@ -154,8 +51,33 @@ question = st.selectbox("Select a Question",
                            "Using a knowledge graph, identify the relationship between product cost, competitor price, and demand. How do these factors influence each other?",
                            "Analyze the pricing strategy of Gucci compared to its competitors. What insights can be drawn about their market positioning and competitive advantage?",
                            "Using a knowledge graph, map out the relationships between brands, products, costs, prices, and demand. How can this information be used to optimize pricing and marketing strategies for luxury brands?"],
-                           placeholder="Question?", disabled=not gds_db)
-
+                           placeholder="Question?", disabled=not openai_api_key)
 
 if question:
-    gds_db.run(question)
+    chain = GraphCypherQAChain.from_llm(
+        ChatOpenAI(temperature=0), graph=graph, verbose=True, 
+        return_intermediate_steps=True, validate_cypher=True
+    )
+
+    result = chain.invoke({"query": question})
+    st.write(f"Final answer: {result['result']}")
+    query = result['intermediate_steps'][0]['query']
+    query = """MATCH (n) RETURN n"""
+    # Use neo4j driver to execute the query
+
+    with driver.session() as session:
+        result = session.run(query)
+        
+        # Create a NetworkX graph
+        G = nx.Graph()
+        for record in result:
+            node1 = record['n']
+            G.add_node(node1.element_id, label=node1.labels)
+
+        # Draw the graph
+        fig, ax = plt.subplots()
+        pos = nx.spring_layout(G)
+        labels = nx.get_node_attributes(G, 'label')
+        nx.draw(G, pos, node_size=500, node_color='skyblue', font_size=10, font_weight='bold')
+        st.pyplot(fig)
+        #nx.draw(G, pos, with_labels=True, labels=labels, node_size=500, node_color='skyblue', font_size=10, font_weight='bold')
