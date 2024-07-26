@@ -68,7 +68,7 @@ def process_graph_result(result):
         relationship_label = record.get('type(r)')
         if p_name and b_name and relationship_label:
             edges.append(Edge(source=p_name, target=b_name, label=relationship_label))
-
+ 
     return nodes, edges
 
 def process_graph_result_select(result):
@@ -117,7 +117,7 @@ openai_api_key = st.text_input("OpenAI API Key", key="langchain_search_api_key_o
 
 question = st.selectbox("Select a Question", 
                         ["Which brand offers the highest-priced product in the dataset?",
-                         "What is the average demand for Gucci products compared to Balenciaga products?",
+                         "What is the average demand for Gucci products compared to Burberry products?",
                          "Which product category has the highest demand overall?",
                          "How does the price of Gucci Men's Shoes compare to the price of Balenciaga Men's Shoes?",
                          "What is the price difference between the most expensive and the least expensive product in the dataset?",
