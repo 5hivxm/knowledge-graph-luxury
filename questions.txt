@@ -1,10 +1,9 @@
-Which brand offers the highest-priced product in the dataset?
-What is the average demand for Gucci products compared to Balenciaga products?
-Which product category has the highest demand overall?
-How does the price of Gucci Men's Shoes compare to the price of Balenciaga Men's Shoes?
-What is the price difference between the most expensive and the least expensive product in the dataset?
-How does the demand for products correlate with their prices across different brands and product categories?
-Using a knowledge graph, identify the relationship between product cost, competitor price, and demand. How do these factors influence each other?
-Analyze the pricing strategy of Gucci compared to its competitors. What insights can be drawn about their market positioning and competitive advantage?
-Identify any seasonal trends in demand for luxury products by analyzing patterns in the dataset over time (if time series data is available). How should brands adjust their inventory accordingly?
-Using a knowledge graph, map out the relationships between brands, products, costs, prices, and demand. How can this information be used to optimize pricing and marketing strategies for luxury brands?
+["Which brand offers the highest-priced product in the dataset?",
+"What is the average demand for Gucci products compared to Balenciaga products?",
+"Which product category has the highest demand overall?",
+"How does the price of Gucci Men's Shoes compare to the price of Balenciaga Men's Shoes?",
+"What is the price difference between the most expensive and the least expensive product in the dataset?",
+"How does the demand for products correlate with their prices across different brands and product categories?",
+"Using a knowledge graph, identify the relationship between product cost, competitor price, and demand. How do these factors influence each other?",
+"Analyze the pricing strategy of Gucci compared to its competitors. What insights can be drawn about their market positioning and competitive advantage?",
+"Using a knowledge graph, map out the relationships between brands, products, costs, prices, and demand. How can this information be used to optimize pricing and marketing strategies for luxury brands?"]
