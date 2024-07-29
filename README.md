@@ -4,9 +4,11 @@
    ```
    $ pip install -r requirements.txt
    ```
+2. Change Neo4j credentials to local
 
-2. Run the app
+3. Insert OpenAI key
 
+4. Run the app
    ```
-   $ streamlit run src/streamlit_app.py
+   $ streamlit run src/app.py
    ```
