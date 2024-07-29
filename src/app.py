@@ -8,12 +8,14 @@ from neo4j import GraphDatabase
 from py2neo import Graph, Node, Relationship
 import networkx as nx
 import matplotlib.pyplot as plt
+from pyvis.network import Network
+import streamlit.components.v1 as components
 
 def process_query(fewshot_cypher_chain, question):
     result = fewshot_cypher_chain(question)
     response_structured = result['result']
-    generated_cypher = result['intermediate_steps'][0]['query']
-    return response_structured, generated_cypher
+    generated_code = result['intermediate_steps'][1]['context']
+    return response_structured, generated_code
 
 
 st.title("Luxury Dashboard")
@@ -51,6 +53,7 @@ FEWSHOT_CYPHER_GENERATION_TEMPLATE = """
 You are an expert Neo4j Developer translating user questions into Cypher to answer questions about luxury brands and their products.
 Convert the user's question based on the schema.
 For questions that contain 's, convert to \'s
+For questions that contain knowledge graph, return schema to plot it
 
 If no context is returned, do not attempt to answer the question.
 
@@ -73,6 +76,10 @@ WHERE b.name='Gucci'
 WITH b, c, AVG(s.price) as avg_price, AVG(sa.price) as avg_competitor_price
 RETURN b.name, c.name, avg_price, avg_competitor_price
 
+Using a knowledge graph, map out the relationships between brands, products, costs, prices, and demand. How can this information be used to optimize pricing and marketing strategies for luxury brands?:
+MATCH (b:BRAND)-[s:SELLS]->(p:PRODUCT)
+RETURN b, s, s.cost, s.price, s.demand, p
+
 
 Note: Do not include any explanations or apologies in your responses.
 Do not respond to any questions that might ask anything else than for you to construct a Cypher statement.
@@ -94,17 +101,65 @@ fewshot_cypher_chain = GraphCypherQAChain.from_llm(
     cypher_prompt = FEWSHOT_CYPHER_GENERATION_PROMPT, return_intermediate_steps=True
 )
 
-response_structured, generated_cypher = process_query(fewshot_cypher_chain, question)
+response_structured, generated_code = process_query(fewshot_cypher_chain, question)
+#st.write(response_structured)
 
 
-st.write(response_structured)
-# Create a node representing a person
-#person = Node("Person", name="John Doe")
-#graph.create(person)
-# Create a node representing a movie
-#movie = Node("Movie", title="The Matrix")
-#graph.create(movie)
-# Create a relationship between the person and the movie
-#person_movie = Relationship(person, "LOVES", movie)
-#graph.create(person_movie)
+G = nx.MultiDiGraph()
 
+# Add nodes and edges to the graph
+for index in generated_code:
+    brand = None
+    product = None
+    rel = None
+    if index.get('b'):
+        brand = index.get('b')['name']
+        G.add_node(brand)
+    elif index.get('b.name'):
+        brand = index.get('b.name')
+        G.add_node(brand)
+
+    if index.get('c'):
+        comp = index.get('c')['name']
+        G.add_node(comp)
+        if brand is not None:
+            rel = 'COMPETES_WITH'
+            G.add_edge(brand, comp, label=rel)
+    elif index.get('c.name'):
+        comp = index.get('c.name')
+        G.add_node(comp)
+        if brand is not None:
+            rel = 'COMPETES_WITH'
+            G.add_edge(brand, comp, label=rel)
+
+    if index.get('s'):
+        rel = index.get('s')[1]
+        
+    if index.get('p'):
+        product = index.get('p')['name']
+        G.add_node(product)
+        if brand is not None:
+            G.add_edge(brand, product, label=rel)
+    elif index.get('p.name'):
+        product = index.get('p.name')
+        G.add_node(product)
+        if brand is not None:
+            G.add_edge(brand, product, label=rel)
+
+
+edge_labels = {}
+for u, v, data in G.edges(data=True):
+    label = data['label']
+    if (u, v) not in edge_labels:
+        edge_labels[(u, v)] = label
+    else:
+        edge_labels[(u, v)] += f", {label}"
+
+fig, ax = plt.subplots(figsize=(12, 8))
+pos = nx.spring_layout(G)  # positions for all nodes
+nx.draw(G, pos, with_labels=True, node_size=2000, node_color='lightblue', font_size=10, font_weight='bold', arrows=True)
+nx.draw_networkx_edge_labels(G, pos, edge_labels=edge_labels)
+
+# Display the plot in Streamlit
+st.title("Graph Visualization")
+st.pyplot(fig)
