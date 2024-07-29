@@ -102,12 +102,9 @@ fewshot_cypher_chain = GraphCypherQAChain.from_llm(
 )
 
 response_structured, generated_code = process_query(fewshot_cypher_chain, question)
-#st.write(response_structured)
-
+st.write(response_structured)
 
 G = nx.MultiDiGraph()
-
-# Add nodes and edges to the graph
 for index in generated_code:
     brand = None
     product = None
@@ -134,7 +131,7 @@ for index in generated_code:
 
     if index.get('s'):
         rel = index.get('s')[1]
-        
+
     if index.get('p'):
         product = index.get('p')['name']
         G.add_node(product)
