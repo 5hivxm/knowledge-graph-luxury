@@ -6,6 +6,9 @@ from langchain.graphs import Neo4jGraph
 from langchain.chains import GraphCypherQAChain
 import pandas as pd
 import graphviz
+import matplotlib.pyplot as plt
+import networkx as nx
+import pydot
 
 st.title("Luxury Dashboard")
 st.write("Ask a question about the dataset below! To use this app, you need to provide an OpenAI API key.")
@@ -107,39 +110,47 @@ generated_cypher = result['intermediate_steps'][0]['query']
 generated_code = result['intermediate_steps'][1]['context']
 st.write(response_structured)
 
-
-G = graphviz.Digraph(engine='sfdp', graph_attr={'size': '10,10', 'nodesep': '1', 'ranksep': '2'},
-                       node_attr={'shape': 'box', 'style': 'filled', 'fillcolor': 'lightgray'},
-                       edge_attr={'fontsize': '10'})
-
+fig, ax = plt.subplots()
+G = nx.DiGraph()
 
 for data in generated_code:
     start, end, rel, comp = "", "", "", ""
+    start_label, end_label, comp_label = "","",""
     for key, value in data.items():
         if key.startswith('b'):
             start = value
+            start_label = 'b'
         if key.startswith('p.'):
             end = value
+            end_label = 'p'
         if key.startswith('s.'):
             rel = "SELLS"
         if key.startswith('c'):
             comp = value
+            comp_label = 'c'
     if start and end:
-        G.node(start)
-        G.node(end)
-        G.edge(start, end, label=rel)
+        G.add_node(start, label=start_label)
+        G.add_node(end, label=end_label)
+        G.add_edge(start, end, label=rel)
     elif start:
-        G.node(start)
+        G.add_node(start, label=start_label)
     elif end:
-        G.node(end)
+        G.add_node(end, label=end_label)
     if start and comp:
-        G.node(start)
-        G.node(comp)
-        G.edge(start, comp, label="COMPETES_WITH")
+        G.add_node(start, label=start_label)
+        G.add_node(comp, label=comp_label)
+        G.add_edge(start, comp, label="COMPETES_WITH")
     elif comp:
-        G.node(comp)
+        G.add_node(comp, label=comp_label)
 
     start, end, rel, comp = "", "", "", ""
 
-st.graphviz_chart(G)
+node_color_map = ['yellow' if G.nodes[node]['label'] == 'p' else 'orange' for node in G]
+edge_color_map = ['red' if G.edges[edge]['label'] == 'COMPETES_WITH' else 'black' for edge in G.edges]
+pos = nx.circular_layout(G)
+labels = nx.get_edge_attributes(G, 'label')
+plt.figure(figsize=(10, 8))
+nx.draw(G, pos, node_color=node_color_map, edge_color=edge_color_map, with_labels=True, node_size=3000, font_size=10, font_weight='bold')
+nx.draw_networkx_edge_labels(G, pos, edge_labels=labels)
+st.pyplot(plt)
 
