@@ -2,9 +2,7 @@ streamlit
 openai
 langchain
 langchain-community
-langchain-openai
-langchain-experimental
 neo4j
-streamlit-agraph==0.0.45
-pyvis
-cy2py
+pandas
+os
+graphviz

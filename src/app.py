@@ -5,11 +5,7 @@ from langchain.prompts.prompt import PromptTemplate
 from langchain.graphs import Neo4jGraph
 from langchain.chains import GraphCypherQAChain
 import pandas as pd
-import re
 import graphviz
-import networkx as nx
-
-df = pd.read_csv('src/luxury_real_data.csv')
 
 st.title("Luxury Dashboard")
 st.write("Ask a question about the dataset below! To use this app, you need to provide an OpenAI API key.")
@@ -37,9 +33,6 @@ llm = ChatOpenAI(
     temperature=0,
     model="gpt-3.5-turbo"
 )
-url ="neo4j+s://71b87f8f.databases.neo4j.io"
-username="neo4j"
-password="94MNxMWz6lAtHp2He6FVJgzc_prKpbmYKQNgJxTNBVg"
 
 url = st.secrets.neo4j.NEO4J_URI
 username = st.secrets.neo4j.NEO4J_USERNAME
@@ -114,7 +107,11 @@ generated_cypher = result['intermediate_steps'][0]['query']
 generated_code = result['intermediate_steps'][1]['context']
 st.write(response_structured)
 
-dot = graphviz.Digraph()
+
+G = graphviz.Digraph(engine='sfdp', graph_attr={'size': '10,10', 'nodesep': '1', 'ranksep': '2'},
+                       node_attr={'shape': 'box', 'style': 'filled', 'fillcolor': 'lightgray'},
+                       edge_attr={'fontsize': '10'})
+
 
 for data in generated_code:
     start, end, rel, comp = "", "", "", ""
@@ -128,17 +125,21 @@ for data in generated_code:
         if key.startswith('c'):
             comp = value
     if start and end:
-        dot.edge(start, end, rel)
+        G.node(start)
+        G.node(end)
+        G.edge(start, end, label=rel)
     elif start:
-        dot.node(start)
+        G.node(start)
     elif end:
-        dot.node(end)
+        G.node(end)
     if start and comp:
-        dot.edge(start, comp, "COMPETES_WITH")
+        G.node(start)
+        G.node(comp)
+        G.edge(start, comp, label="COMPETES_WITH")
     elif comp:
-        dot.node(comp)
+        G.node(comp)
 
     start, end, rel, comp = "", "", "", ""
 
+st.graphviz_chart(G)
 
-st.graphviz_chart(dot)
