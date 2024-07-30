@@ -4,24 +4,17 @@ import os
 from langchain.prompts.prompt import PromptTemplate
 from langchain.graphs import Neo4jGraph
 from langchain.chains import GraphCypherQAChain
-from neo4j import GraphDatabase
-from py2neo import Graph, Node, Relationship
+import pandas as pd
+import re
+import graphviz
 import networkx as nx
-import matplotlib.pyplot as plt
-from pyvis.network import Network
-import streamlit.components.v1 as components
 
-def process_query(fewshot_cypher_chain, question):
-    result = fewshot_cypher_chain(question)
-    response_structured = result['result']
-    generated_code = result['intermediate_steps'][1]['context']
-    return response_structured, generated_code
-
+df = pd.read_csv('src/luxury_real_data.csv')
 
 st.title("Luxury Dashboard")
 st.write("Ask a question about the dataset below! To use this app, you need to provide an OpenAI API key.")
 
-openai_api_key = st.text_input("OpenAI API Key", key="langchain_search_api_key_openai", type="password")
+openai_api_key = st.secrets.openai.key
 os.environ["OPENAI_API_KEY"] = openai_api_key
 
 if not openai_api_key:
@@ -44,6 +37,9 @@ llm = ChatOpenAI(
     temperature=0,
     model="gpt-3.5-turbo"
 )
+url ="neo4j+s://71b87f8f.databases.neo4j.io"
+username="neo4j"
+password="94MNxMWz6lAtHp2He6FVJgzc_prKpbmYKQNgJxTNBVg"
 
 url = st.secrets.neo4j.NEO4J_URI
 username = st.secrets.neo4j.NEO4J_USERNAME
@@ -78,7 +74,12 @@ RETURN b.name, c.name, avg_price, avg_competitor_price
 
 Using a knowledge graph, map out the relationships between brands, products, costs, prices, and demand. How can this information be used to optimize pricing and marketing strategies for luxury brands?:
 MATCH (b:BRAND)-[s:SELLS]->(p:PRODUCT)
-RETURN b, s, s.cost, s.price, s.demand, p
+RETURN b.name, s, s.cost, s.price, s.demand, p.name
+
+What is the price difference between the most expensive and the least expensive product in the dataset?:
+MATCH (b)-[s:SELLS]->(p)
+WITH MAX(s.price) as max_price, MIN(s.price) as min_price
+RETURN max_price - min_price as price_difference
 
 
 Note: Do not include any explanations or apologies in your responses.
@@ -101,62 +102,22 @@ fewshot_cypher_chain = GraphCypherQAChain.from_llm(
     cypher_prompt = FEWSHOT_CYPHER_GENERATION_PROMPT, return_intermediate_steps=True
 )
 
-response_structured, generated_code = process_query(fewshot_cypher_chain, question)
+result = fewshot_cypher_chain(question)
+response_structured = result['result']
+generated_cypher = result['intermediate_steps'][0]['query']
+generated_code = result['intermediate_steps'][1]['context']
 st.write(response_structured)
 
-G = nx.MultiDiGraph()
-for index in generated_code:
-    brand = None
-    product = None
-    rel = None
-    if index.get('b'):
-        brand = index.get('b')['name']
-        G.add_node(brand)
-    elif index.get('b.name'):
-        brand = index.get('b.name')
-        G.add_node(brand)
+pattern = r'\(([^:]+):([^)]*)\)|\[([^\]]+):([^\]]*)\]'
+matches = re.findall(pattern, generated_cypher)
 
-    if index.get('c'):
-        comp = index.get('c')['name']
-        G.add_node(comp)
-        if brand is not None:
-            rel = 'COMPETES_WITH'
-            G.add_edge(brand, comp, label=rel)
-    elif index.get('c.name'):
-        comp = index.get('c.name')
-        G.add_node(comp)
-        if brand is not None:
-            rel = 'COMPETES_WITH'
-            G.add_edge(brand, comp, label=rel)
+nodes = [(m[0], m[1]) for m in matches if m[0] and m[1]]
+relationships = [(m[2], m[3]) for m in matches if m[2] and m[3]]
 
-    if index.get('s'):
-        rel = index.get('s')[1]
+st.write("Nodes:", nodes)
+st.write("Relationships:", relationships)
 
-    if index.get('p'):
-        product = index.get('p')['name']
-        G.add_node(product)
-        if brand is not None:
-            G.add_edge(brand, product, label=rel)
-    elif index.get('p.name'):
-        product = index.get('p.name')
-        G.add_node(product)
-        if brand is not None:
-            G.add_edge(brand, product, label=rel)
-
-
-edge_labels = {}
-for u, v, data in G.edges(data=True):
-    label = data['label']
-    if (u, v) not in edge_labels:
-        edge_labels[(u, v)] = label
-    else:
-        edge_labels[(u, v)] += f", {label}"
-
-fig, ax = plt.subplots(figsize=(12, 8))
-pos = nx.spring_layout(G)  # positions for all nodes
-nx.draw(G, pos, with_labels=True, node_size=2000, node_color='lightblue', font_size=10, font_weight='bold', arrows=True)
-nx.draw_networkx_edge_labels(G, pos, edge_labels=edge_labels)
-
-# Display the plot in Streamlit
-st.title("Graph Visualization")
-st.pyplot(fig)
+import cy2py
+%load_ext cy2py
+%cypher?
+CALL apoc.meta.graph()
