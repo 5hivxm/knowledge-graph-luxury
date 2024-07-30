@@ -81,6 +81,11 @@ MATCH (b)-[s:SELLS]->(p)
 WITH MAX(s.price) as max_price, MIN(s.price) as min_price
 RETURN max_price - min_price as price_difference
 
+Which product category has the highest demand overall?:
+MATCH (b:BRAND)-[s:SELLS]-(p:PRODUCT)
+RETURN p.name, SUM(s.demand) as total_demand
+ORDER BY total_demand DESC
+LIMIT 1
 
 Note: Do not include any explanations or apologies in your responses.
 Do not respond to any questions that might ask anything else than for you to construct a Cypher statement.
@@ -99,7 +104,8 @@ fewshot_cypher_chain = GraphCypherQAChain.from_llm(
     cypher_llm=llm,
     qa_llm=ChatOpenAI(temperature=0, api_key=openai_api_key),
     graph=graph, verbose=True,
-    cypher_prompt = FEWSHOT_CYPHER_GENERATION_PROMPT, return_intermediate_steps=True
+    cypher_prompt = FEWSHOT_CYPHER_GENERATION_PROMPT, return_intermediate_steps=True,
+    top_k= 88
 )
 
 result = fewshot_cypher_chain(question)
@@ -108,16 +114,31 @@ generated_cypher = result['intermediate_steps'][0]['query']
 generated_code = result['intermediate_steps'][1]['context']
 st.write(response_structured)
 
-pattern = r'\(([^:]+):([^)]*)\)|\[([^\]]+):([^\]]*)\]'
-matches = re.findall(pattern, generated_cypher)
+dot = graphviz.Digraph()
 
-nodes = [(m[0], m[1]) for m in matches if m[0] and m[1]]
-relationships = [(m[2], m[3]) for m in matches if m[2] and m[3]]
+for data in generated_code:
+    start, end, rel, comp = "", "", "", ""
+    for key, value in data.items():
+        if key.startswith('b'):
+            start = value
+        if key.startswith('p.'):
+            end = value
+        if key.startswith('s.'):
+            rel = "SELLS"
+        if key.startswith('c'):
+            comp = value
+    if start and end:
+        dot.edge(start, end, rel)
+    elif start:
+        dot.node(start)
+    elif end:
+        dot.node(end)
+    if start and comp:
+        dot.edge(start, comp, "COMPETES_WITH")
+    elif comp:
+        dot.node(comp)
 
-st.write("Nodes:", nodes)
-st.write("Relationships:", relationships)
+    start, end, rel, comp = "", "", "", ""
 
-import cy2py
-%load_ext cy2py
-%cypher?
-CALL apoc.meta.graph()
+
+st.graphviz_chart(dot)
