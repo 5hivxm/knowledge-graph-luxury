@@ -3,6 +3,5 @@ openai
 langchain
 langchain-community
 neo4j
-os
-matplotlib.pyplot
+matplotlib
 networkx

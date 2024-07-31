@@ -1,7 +1,7 @@
 import streamlit as st
 from langchain_community.chat_models import ChatOpenAI
 import os
-from langchain.prompts.prompt import PromptTemplate
+from langchain_core.prompts import PromptTemplate
 from langchain.graphs import Neo4jGraph
 from langchain.chains import GraphCypherQAChain
 import matplotlib.pyplot as plt
